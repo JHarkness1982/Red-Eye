@@ -2,46 +2,188 @@
 <html>
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Red Eye - Privacy Filter</title>
 <style>
-body { font-family: sans-serif; background:#222; color:#eee; padding:20px; max-width: 800px; }
-h1 { margin-bottom: 5px; color: #ff2800; }
-.description { color: #ccc; font-size: 0.95rem; line-height: 1.4; margin-bottom: 20px; border-left: 3px solid #00ddff; padding-left: 10px; }
-canvas { margin-top:20px; border:1px solid #555; image-rendering: pixelated; max-width: 100%; }
-.controls { margin-top:20px; }
-label { display:block; margin-top:10px; }
-input[type=number] { width:80px; }
-button { margin-top: 15px; padding: 8px 15px; background: #ff2800; border: none; color: white; cursor: pointer; font-weight: bold; }
-button:hover { background: #cc2000; }
+:root {
+    --primary: #ff2800;
+    --primary-hover: #cc2000;
+    --bg: #1a1a1a;
+    --card-bg: #262626;
+    --text: #eee;
+    --text-muted: #aaa;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body { 
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+    background: var(--bg); 
+    color: var(--text); 
+    padding: 15px;
+    line-height: 1.5;
+}
+
+.container {
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+h1 { 
+    margin-bottom: 10px; 
+    color: var(--primary); 
+    font-size: 1.8rem;
+    text-align: center;
+}
+
+.description { 
+    color: var(--text-muted); 
+    font-size: 0.9rem; 
+    margin-bottom: 20px; 
+    border-left: 3px solid #00ddff; 
+    padding-left: 12px; 
+}
+
+.card {
+    background: var(--card-bg);
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+}
+
+input[type="file"] {
+    display: block;
+    width: 100%;
+    margin-bottom: 15px;
+    color: var(--text-muted);
+}
+
+/* Custom file upload styling for mobile touch */
+input[type="file"]::file-selector-button {
+    background: #444;
+    color: white;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-right: 10px;
+    font-size: 0.9rem;
+}
+
+.control-group {
+    margin-bottom: 12px;
+}
+
+label { 
+    display: flex; 
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.95rem;
+}
+
+input[type=number] { 
+    width: 80px; 
+    padding: 6px;
+    background: #333;
+    border: 1px solid #555;
+    color: white;
+    border-radius: 4px;
+    text-align: center;
+    font-size: 1rem;
+}
+
+.btn-container {
+    display: flex;
+    gap: 10px;
+    margin-top: 15px;
+}
+
+button { 
+    flex: 1;
+    padding: 12px; 
+    background: var(--primary); 
+    border: none; 
+    color: white; 
+    cursor: pointer; 
+    font-weight: bold; 
+    font-size: 1rem;
+    border-radius: 6px;
+    touch-action: manipulation; /* Optimizes mobile tap delay */
+}
+
+button:hover { background: var(--primary-hover); }
+
+#downloadBtn {
+    background: #0088cc;
+}
+#downloadBtn:hover {
+    background: #006699;
+}
+#downloadBtn:disabled {
+    background: #444;
+    color: #777;
+    cursor: not-allowed;
+}
+
+.canvas-container {
+    text-align: center;
+    margin-top: 10px;
+}
+
+canvas { 
+    border: 1px solid #555; 
+    image-rendering: pixelated; 
+    max-width: 100%; /* Keeps canvas fluid on small screens */
+    height: auto;
+    border-radius: 4px;
+    background: #000;
+}
 </style>
 </head>
 <body>
 
-<h1>Red Eye</h1>
-<div class="description">
-    <strong>Privacy Filter Tool:</strong> This application converts images into a high-contrast cyan, white, and randomized red noise pattern. The processed image scrambles visual information to the naked eye, acting as an optical privacy shield. 
-    <br><br>
-    <em>Note: The hidden content becomes legible and visible only when decoded by wearing glasses with red-colored lenses, which naturally filter out the red noise and reveal the underlying contrast.</em>
+<div class="container">
+    <h1>Red Eye</h1>
+    <div class="description">
+        <strong>Privacy Filter Tool:</strong> This application converts images into a scrambled pattern. 
+        The hidden content becomes visible only when decoded by wearing glasses with red-colored lenses.
+    </div>
+
+    <div class="card">
+        <input type="file" id="fileInput" accept="image/*">
+
+        <div class="control-group">
+            <label>Curve (%): <input type="number" id="curve" min="50" max="200" value="100"></label>
+        </div>
+        <div class="control-group">
+            <label>Dithering (%): <input type="number" id="dither" min="0" max="200" value="100"></label>
+        </div>
+        <div class="control-group">
+            <label>Noise (%): <input type="number" id="noise" min="0" max="200" value="30"></label>
+        </div>
+
+        <div class="btn-container">
+            <button id="applyBtn">Apply Filter</button>
+            <button id="downloadBtn" disabled>Download Image</button>
+        </div>
+    </div>
+
+    <div class="canvas-container">
+        <canvas id="canvas"></canvas>
+    </div>
 </div>
-
-<input type="file" id="fileInput">
-
-<div class="controls">
-<label>Curve (%): <input type="number" id="curve" min="50" max="200" value="100"></label>
-<label>Dithering (%): <input type="number" id="dither" min="0" max="200" value="100"></label>
-<label>Noise (%): <input type="number" id="noise" min="0" max="200" value="30"></label>
-<button id="applyBtn">Apply Filter</button>
-</div>
-
-<canvas id="canvas"></canvas>
 
 <script>
 const fileInput = document.getElementById("fileInput");
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
+const applyBtn = document.getElementById("applyBtn");
+const downloadBtn = document.getElementById("downloadBtn");
 let originalImage = null;
 
 fileInput.onchange = e => {
+    if (!e.target.files[0]) return;
     const img = new Image();
     img.onload = () => {
         originalImage = img;
@@ -49,11 +191,22 @@ fileInput.onchange = e => {
         canvas.height = img.height;
         ctx.drawImage(img,0,0);
         applyFilter();
+        downloadBtn.disabled = false; // Enable download button once image is loaded
     };
     img.src = URL.createObjectURL(e.target.files[0]);
 };
 
-document.getElementById("applyBtn").onclick = applyFilter;
+applyBtn.onclick = applyFilter;
+
+// Download handler
+downloadBtn.onclick = () => {
+    if (!originalImage) return;
+    
+    const link = document.createElement("a");
+    link.download = "redeye-filtered.png";
+    link.href = canvas.toDataURL("image/png");
+    link.click();
+};
 
 function applyFilter() {
     if (!originalImage) return;
@@ -131,7 +284,7 @@ function applyFilter() {
     ctx.putImageData(imgData,0,0);
 }
 
-// Atkinson Dithering Algorithm (Optimized for contrast and lightweight text structures)
+// Atkinson Dithering Algorithm
 function atkinsonDitherLuma(imgData, strength) {
     const w = imgData.width;
     const h = imgData.height;
@@ -146,7 +299,6 @@ function atkinsonDitherLuma(imgData, strength) {
             
             d[i] = d[i+1] = d[i+2] = newVal;
 
-            // Atkinson diffuses only 1/8 of the error to 6 neighboring pixels
             let e = err / 8; 
 
             distribute(x + 1, y,     e);
