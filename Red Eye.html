@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Red Eye - Privacy Filter</title>
+<style>
+body { font-family: sans-serif; background:#222; color:#eee; padding:20px; max-width: 800px; }
+h1 { margin-bottom: 5px; color: #ff2800; }
+.description { color: #ccc; font-size: 0.95rem; line-height: 1.4; margin-bottom: 20px; border-left: 3px solid #00ddff; padding-left: 10px; }
+canvas { margin-top:20px; border:1px solid #555; image-rendering: pixelated; max-width: 100%; }
+.controls { margin-top:20px; }
+label { display:block; margin-top:10px; }
+input[type=number] { width:80px; }
+button { margin-top: 15px; padding: 8px 15px; background: #ff2800; border: none; color: white; cursor: pointer; font-weight: bold; }
+button:hover { background: #cc2000; }
+</style>
+</head>
+<body>
+
+<h1>Red Eye</h1>
+<div class="description">
+    <strong>Privacy Filter Tool:</strong> This application converts images into a high-contrast cyan, white, and randomized red noise pattern. The processed image scrambles visual information to the naked eye, acting as an optical privacy shield. 
+    <br><br>
+    <em>Note: The hidden content becomes legible and visible only when decoded by wearing glasses with red-colored lenses, which naturally filter out the red noise and reveal the underlying contrast.</em>
+</div>
+
+<input type="file" id="fileInput">
+
+<div class="controls">
+<label>Curve (%): <input type="number" id="curve" min="50" max="200" value="100"></label>
+<label>Dithering (%): <input type="number" id="dither" min="0" max="200" value="100"></label>
+<label>Noise (%): <input type="number" id="noise" min="0" max="200" value="30"></label>
+<button id="applyBtn">Apply Filter</button>
+</div>
+
+<canvas id="canvas"></canvas>
+
+<script>
+const fileInput = document.getElementById("fileInput");
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+let originalImage = null;
+
+fileInput.onchange = e => {
+    const img = new Image();
+    img.onload = () => {
+        originalImage = img;
+        canvas.width = img.width;
+        canvas.height = img.height;
+        ctx.drawImage(img,0,0);
+        applyFilter();
+    };
+    img.src = URL.createObjectURL(e.target.files[0]);
+};
+
+document.getElementById("applyBtn").onclick = applyFilter;
+
+function applyFilter() {
+    if (!originalImage) return;
+
+    const curveFactor  = document.getElementById("curve").value  / 100;
+    const ditherFactor = document.getElementById("dither").value / 100;
+    const noiseFactor  = document.getElementById("noise").value  / 100;
+
+    const w = canvas.width;
+    const h = canvas.height;
+
+    ctx.drawImage(originalImage, 0, 0, w, h);
+
+    let imgData = ctx.getImageData(0,0,w,h);
+    let d = imgData.data;
+
+    // 1) Grayscale conversion
+    for (let i=0; i<d.length; i+=4) {
+        let L = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2];
+        d[i] = d[i+1] = d[i+2] = L;
+    }
+
+    // 2) Dithering using Atkinson Algorithm
+    atkinsonDitherLuma(imgData, ditherFactor);
+
+    // 3) Generate randomized red noise on the white pixels produced by dithering
+    for (let i=0; i<d.length; i+=4) {
+        if (d[i] === 255) {
+
+            // Variable percentage red noise generation
+            if (Math.random() < noiseFactor) {
+                let c = Math.floor(Math.random()*3);
+                if (c===0) { d[i]=255; d[i+1]=116; d[i+2]=92;  }
+                if (c===1) { d[i]=255; d[i+1]=77;  d[i+2]=46;  }
+                if (c===2) { d[i]=255; d[i+1]=40;  d[i+2]=0;   }
+            }
+
+            // If it doesn't become noise → temporarily keep it white
+            else {
+                d[i]   = 255;
+                d[i+1] = 255;
+                d[i+2] = 255;
+            }
+        }
+    }
+
+    // 4) Final color mapping: preserve white and red noise, convert black to pure cyan
+    for (let i=0; i<d.length; i+=4) {
+
+        // If it's red noise → skip (do not touch)
+        if (d[i] === 255 && (d[i+1] === 116 || d[i+1] === 77 || d[i+1] === 40)) {
+            continue;
+        }
+
+        // If it's pure white → skip (stays structural white)
+        if (d[i] === 255 && d[i+1] === 255 && d[i+2] === 255) {
+            continue;
+        }
+
+        // Otherwise it's black/dark → convert to pure cyan
+        else {
+            d[i]   = 0;
+            d[i+1] = 221;
+            d[i+2] = 255;
+        }
+    }
+
+    // 5) Global curve adjustment (brightness)
+    for (let i=0; i<d.length; i+=4) {
+        d[i]   = Math.min(255, d[i]   * curveFactor);
+        d[i+1] = Math.min(255, d[i+1] * curveFactor);
+        d[i+2] = Math.min(255, d[i+2] * curveFactor);
+    }
+
+    ctx.putImageData(imgData,0,0);
+}
+
+// Atkinson Dithering Algorithm (Optimized for contrast and lightweight text structures)
+function atkinsonDitherLuma(imgData, strength) {
+    const w = imgData.width;
+    const h = imgData.height;
+    const d = imgData.data;
+
+    for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+            let i = (y * w + x) * 4;
+            let old = d[i];
+            let newVal = old < 128 ? 0 : 255;
+            let err = (old - newVal) * strength;
+            
+            d[i] = d[i+1] = d[i+2] = newVal;
+
+            // Atkinson diffuses only 1/8 of the error to 6 neighboring pixels
+            let e = err / 8; 
+
+            distribute(x + 1, y,     e);
+            distribute(x + 2, y,     e);
+            distribute(x - 1, y + 1, e);
+            distribute(x,     y + 1, e);
+            distribute(x + 1, y + 1, e);
+            distribute(x,     y + 2, e);
+
+            function distribute(nx, ny, e) {
+                if (nx < 0 || nx >= w || ny < 0 || ny >= h) return;
+                let j = (ny * w + nx) * 4;
+                let v = d[j] + e;
+                v = Math.max(0, Math.min(255, v));
+                d[j] = d[j+1] = d[j+2] = v;
+            }
+        }
+    }
+}
+</script>
+
+</body>
+</html>
